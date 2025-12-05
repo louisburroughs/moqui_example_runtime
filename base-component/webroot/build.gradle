@@ -13,11 +13,15 @@
  */
 
 import java.nio.charset.StandardCharsets
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLContext
 
 buildscript {
     repositories {
-        mavenCentral()
-        maven { url "https://plugins.gradle.org/m2/" }
+        mavenLocal()
+        maven{ url "https://artifactory.michelin.com/maven-public" }
+        maven { url "https://repo1.maven.org/maven2" }
+        // maven { url "https://plugins.gradle.org/m2/" }
     }
     dependencies {
         classpath 'com.github.ben-manes:gradle-versions-plugin:0.47.0'
@@ -33,7 +37,7 @@ dependencyUpdates.resolutionStrategy = { componentSelection { rules -> rules.all
 
 def webrootPath = "screen/webroot"
 def libsPath = webrootPath + "/libs"
-def downloadBase = "http://cdnjs.cloudflare.com/ajax/libs/"
+def downloadBase = "https://cdnjs.cloudflare.com/ajax/libs/"
 def fileMap = [
     "rsvp/4.8.3/rsvp.min.js":"",
 
@@ -92,7 +96,7 @@ def fileMap = [
     "vue/2.7.14/vue.min.js":""
 ]
 
-def jsdelivrBase = "https://cdn.jsdelivr.net/npm/"
+def jsdelivrBase = "http://cdn.jsdelivr.net/npm/"
 def jsdelivrList = ["quasar@1.22.10/dist/quasar.min.css", "quasar@1.22.10/dist/quasar.umd.min.js"]
 
 String getTargetPath(String sourcePath, String targetPath) {
@@ -102,6 +106,30 @@ String getTargetPath(String sourcePath, String targetPath) {
     }
     return targetPath
 }
+
+void downloadFile(String sourceUrl, File destFile) {
+    logger.lifecycle("Downloading ${sourceUrl} to ${destFile.absolutePath}")
+    destFile.getParentFile().mkdirs()
+    
+    URL url = new URL(sourceUrl)
+    URLConnection connection = url.openConnection()
+    
+    // Disable SSL certificate verification for HTTPS connections
+    if (connection instanceof HttpsURLConnection) {
+        HttpsURLConnection httpsConnection = (HttpsURLConnection) connection
+        SSLContext sslContext = SSLContext.getInstance("TLSv1.2")
+        sslContext.init(null, null, new java.security.SecureRandom())
+        httpsConnection.setSSLSocketFactory(sslContext.getSocketFactory())
+        httpsConnection.setHostnameVerifier { hostname, session -> true }
+    }
+    
+    connection.inputStream.withCloseable { input ->
+        destFile.withOutputStream { output ->
+            output << input
+        }
+    }
+}
+
 task downloadFiles { doLast {
     for (Map.Entry fileEntry in fileMap.entrySet()) {
         String sourcePath = fileEntry.key
@@ -111,9 +139,7 @@ task downloadFiles { doLast {
         if (targetFile.exists()) continue
 
         String sourceUrl = downloadBase + sourcePath
-        logger.lifecycle("Downloading ${sourceUrl} to ${targetFile.absolutePath}")
-        targetFile.getParentFile().mkdirs()
-        ant.get(src: sourceUrl, dest: targetFile)
+        downloadFile(sourceUrl, targetFile)
     }
 
     for (String jsdPath in jsdelivrList) {
@@ -125,9 +151,7 @@ task downloadFiles { doLast {
         if (targetFile.exists()) continue
 
         String sourceUrl = jsdelivrBase + jsdPath
-        logger.lifecycle("Downloading ${sourceUrl} to ${targetFile.absolutePath}")
-        targetFile.getParentFile().mkdirs()
-        ant.get(src: sourceUrl, dest: targetFile)
+        downloadFile(sourceUrl, targetFile)
     }
 } }
 
