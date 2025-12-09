@@ -111,22 +111,47 @@ void downloadFile(String sourceUrl, File destFile) {
     logger.lifecycle("Downloading ${sourceUrl} to ${destFile.absolutePath}")
     destFile.getParentFile().mkdirs()
     
-    URL url = new URL(sourceUrl)
-    URLConnection connection = url.openConnection()
+    String finalUrl = sourceUrl
+    int redirectCount = 0
+    int maxRedirects = 5
     
-    // Disable SSL certificate verification for HTTPS connections
-    if (connection instanceof HttpsURLConnection) {
-        HttpsURLConnection httpsConnection = (HttpsURLConnection) connection
-        SSLContext sslContext = SSLContext.getInstance("TLSv1.2")
-        sslContext.init(null, null, new java.security.SecureRandom())
-        httpsConnection.setSSLSocketFactory(sslContext.getSocketFactory())
-        httpsConnection.setHostnameVerifier { hostname, session -> true }
-    }
-    
-    connection.inputStream.withCloseable { input ->
-        destFile.withOutputStream { output ->
-            output << input
+    while (redirectCount < maxRedirects) {
+        URL url = new URL(finalUrl)
+        URLConnection connection = url.openConnection()
+        
+        // Set timeouts
+        connection.setReadTimeout(30000)
+        connection.setConnectTimeout(30000)
+        
+        // Disable SSL certificate verification for HTTPS connections
+        if (connection instanceof HttpsURLConnection) {
+            HttpsURLConnection httpsConnection = (HttpsURLConnection) connection
+            SSLContext sslContext = SSLContext.getInstance("TLSv1.2")
+            sslContext.init(null, null, new java.security.SecureRandom())
+            httpsConnection.setSSLSocketFactory(sslContext.getSocketFactory())
+            httpsConnection.setHostnameVerifier { hostname, session -> true }
+            httpsConnection.setInstanceFollowRedirects(false)
+        } else if (connection instanceof java.net.HttpURLConnection) {
+            ((java.net.HttpURLConnection) connection).setInstanceFollowRedirects(false)
         }
+        
+        int responseCode = ((java.net.HttpURLConnection) connection).getResponseCode()
+        
+        // Handle redirects manually
+        if (responseCode == 301 || responseCode == 302 || responseCode == 303 || responseCode == 307 || responseCode == 308) {
+            finalUrl = connection.getHeaderField("Location")
+            logger.lifecycle("Redirect to: ${finalUrl}")
+            redirectCount++
+            continue
+        }
+        
+        // Download the file
+        connection.inputStream.withCloseable { input ->
+            destFile.withOutputStream { output ->
+                output << input
+            }
+        }
+        break
     }
 }
 
