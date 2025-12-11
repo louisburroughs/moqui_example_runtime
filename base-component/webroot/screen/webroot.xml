@@ -72,8 +72,9 @@ along with this software (see the LICENSE.md file). If not, see
         <default-response type="none"/>
     </transition>
 
-    <subscreens default-item="qapps">
+    <subscreens default-item="dapps">
         <subscreens-item name="toolstatic" location="component://tools/screen/toolstatic.xml" menu-include="false"/>
+        <subscreens-item name="dapps" location="component://durion-theme/screen/webroot/dapps.xml"/>
         <!-- add UNDECORATED (or self-decorating) app roots here -->
     </subscreens>
     <widgets>
